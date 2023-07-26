@@ -1,0 +1,35 @@
+<settings>
+    <servers>
+        <server>
+            <id>projectrepo</id>
+            <username>${env.REPOSITORY_AUTH_USER}</username>
+            <password>${env.REPOSITORY_AUTH_TOKEN}</password>
+        </server>
+    </servers>
+  <profiles>
+    <profile>
+      <id>default</id>
+      <pluginRepositories>
+        <pluginRepository>
+          <id>projectrepo</id>
+          <name>Project Repository Plugins</name>
+          <url>${env.REPOSITORY_URL}</url>
+          <releases>
+            <enabled>true</enabled>
+          </releases>
+          <snapshots>
+            <enabled>true</enabled>
+          </snapshots>
+        </pluginRepository>
+      </pluginRepositories>
+    </profile>
+  </profiles>
+    <mirrors>
+      <mirror>
+        <id>projectrepo</id>
+        <name>Project Maven Central mirror</name>
+        <url>${env.REPOSITORY_URL}</url>
+        <mirrorOf>central</mirrorOf>
+      </mirror>
+    </mirrors>
+</settings>
