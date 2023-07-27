@@ -1,0 +1,174 @@
+---
+name: Build, Test, Publish
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.mvn/**'
+      - 'src/**'
+      - 'Dockerfile'
+      - 'pom.xml'
+      - '.classpath'
+      - '.project'
+
+permissions:
+  id-token: write  # required to use OIDC authentication
+  contents: write  # required to checkout the code from the repo and to perform release
+  packages: write  # required to publish to packages
+
+jobs:
+  check:
+    name: GitHub Prerequisites Check
+    runs-on: ubuntu-latest
+    outputs:
+      has_gh_secrets: ${{ steps.check-gh-key-secret.outputs.declared }}
+    steps:
+      - name: Check for GitHub Secret availability
+        id: check-gh-key-secret
+        shell: bash
+        run: |
+          if [[ ! -z  "${{ secrets.GITHUB_TOKEN }}" ]]; then
+            echo "All secrets are declared."
+            echo "declared=true" >> $GITHUB_OUTPUT;
+          else
+            echo "GITHUB_TOKEN secret is missing."
+            exit 1
+          fi
+  maven:
+    name: Maven Build & Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    needs: [check]
+    if: |
+      needs.check.outputs.has_gh_secrets
+    env:
+      REPOSITORY_URL: "https://github.com/${{ github.repository }}/packages"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: main
+      - uses: benjlevesque/short-sha@v2.2
+        id: short-sha
+        with:
+          length: 7
+      - run: echo $SHA
+        env:
+          SHA: ${{ steps.short-sha.outputs.sha }}
+      - uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          server-id: projectrepo
+          settings-path: ${{ github.workspace }}/.mvn
+          cache: maven
+
+      - name: Maven Test
+        id: mvn-test
+        shell: bash
+        run: |
+          mvn --settings ${GITHUB_WORKSPACE}/.mvn/settings.xml -N wrapper:wrapper
+          ./mvnw --settings ${GITHUB_WORKSPACE}/.mvn/settings.xml dependency:resolve
+          ./mvnw --settings ${GITHUB_WORKSPACE}/.mvn/settings.xml test
+
+      - name: Maven Package
+        if: success()
+        id: mvn-package
+        shell: bash
+        run: |
+          ./mvnw versions:set -DnewVersion=sha-${{ env.SHA }} -DgenerateBackupPoms=false
+          ./mvnw --settings ${GITHUB_WORKSPACE}/.mvn/settings.xml package
+
+      - name: Publish to GitHub Packages
+        if: |
+          success()
+        run: ./mvnw --settings ${GITHUB_WORKSPACE}/.mvn/settings.xml --batch-mode deploy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  container:
+    name: GitHub Packages - Container Build & Publish
+    runs-on: ubuntu-latest
+    needs: [check]
+    if: |
+      needs.check.outputs.has_gh_secrets
+    env:
+      REGISTRY: ghcr.io
+      REPOSITORY: ${{ github.repository }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: main
+      - uses: benjlevesque/short-sha@v2.2
+        id: short-sha
+        with:
+          length: 7
+      - run: echo $SHA
+        env:
+          SHA: ${{ steps.short-sha.outputs.sha }}
+      - uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          server-id: projectrepo
+          settings-path: ${{ github.workspace }}/.mvn
+          cache: maven
+
+      - name: Maven Wrapper
+        id: mvn-wrapper
+        shell: bash
+        run: |
+          mvn --settings ${GITHUB_WORKSPACE}/.mvn/settings.xml -N wrapper:wrapper
+
+      - name: Docker Test
+        id: docker-test
+        env:
+          DOCKER_BUILDKIT: 1
+          REGISTRY: ${{ env.REGISTRY}}
+          REPOSITORY: ${{ github.repository }}
+          IMAGE_TAG: ${{ github.sha }}-test
+        run: >
+          docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG
+          --target export-test-results
+          --build-arg REPOSITORY_URL="${{ env.REPOSITORY_URL }}"
+          --build-arg REPOSITORY_AUTH_USER="${{ github.repository_owner }}"
+          --build-arg REPOSITORY_AUTH_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          --output type=tar,dest=./out . ;
+          cat ./out
+
+      - name: Log in to the Container registry
+        if: |
+          success()
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v4
+        if: |
+          success()
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}
+          tags: |
+            type=raw,value=latest
+            type=sha
+            type=sha,format=long
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        if: |
+          success()
+        with:
+          context: .
+          target: production
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

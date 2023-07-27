@@ -5,7 +5,7 @@
 
   <groupId>com.gda.example.app</groupId>
   <artifactId>myserver</artifactId>
-  <version>1.1.1</version>
+  <version>1.0.0</version>
 
   <name>myserver</name>
   <url>https://github.com/dnaprawa/gda-java.git</url>
