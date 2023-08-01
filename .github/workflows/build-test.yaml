@@ -1,0 +1,64 @@
+---
+name: Build and Test
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  check:
+    name: GitHub Prerequisites Check
+    runs-on: ubuntu-latest
+    outputs:
+      has_gh_secrets: ${{ steps.check-gh-key-secret.outputs.declared }}
+    steps:
+      - name: Check for GitHub Secret availability
+        id: check-gh-key-secret
+        shell: bash
+        run: |
+          if [[ ! -z  "${{ secrets.GITHUB_TOKEN }}" ]]; then
+            echo "All secrets are declared."
+            echo "declared=true" >> $GITHUB_OUTPUT;
+          else
+            echo "GITHUB_TOKEN secret is missing."
+            exit 1
+          fi
+  maven:
+    name: Maven Build & Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    needs: [check]
+    if: |
+      needs.check.outputs.has_gh_secrets
+    env:
+      REPOSITORY_URL: "https://github.com/${{ github.repository }}/packages"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: main
+      - uses: benjlevesque/short-sha@v2.2
+        id: short-sha
+        with:
+          length: 7
+      - run: echo $SHA
+        env:
+          SHA: ${{ steps.short-sha.outputs.sha }}
+      - uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          server-id: projectrepo
+          settings-path: ${{ github.workspace }}/.mvn
+          cache: maven
+
+      - name: Maven Test
+        id: mvn-test
+        shell: bash
+        run: |
+          mvn --settings ${GITHUB_WORKSPACE}/.mvn/settings.xml -N wrapper:wrapper
+          ./mvnw --settings ${GITHUB_WORKSPACE}/.mvn/settings.xml dependency:resolve
+          ./mvnw --settings ${GITHUB_WORKSPACE}/.mvn/settings.xml test
