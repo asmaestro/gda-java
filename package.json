@@ -1,0 +1,67 @@
+{
+  "release": {
+    "tagFormat": "v${version}",
+    "ci": true,
+    "debug": false,
+    "plugins":  [
+      ["@semantic-release/commit-analyzer", {
+        "preset": "conventionalcommits",
+        "releaseRules": [
+          { "type": "revert", "release": "patch" },
+          { "type": "docs", "release": "patch" },
+          { "type": "style", "release": "patch" },
+          { "type": "chore", "release": "patch" },
+          { "type": "refactor", "release": "patch" },
+          { "type": "test", "release": "patch" },
+          { "type": "build", "release": "patch" },
+          { "type": "ci", "release": "patch" },
+          { "type": "improvement", "release": "minor" }
+        ],
+        "parserOpts": {
+          "noteKeywords": ["BREAKING CHANGE", "BREAKING CHANGES"]
+        }
+      }
+    ],
+        ["@semantic-release/release-notes-generator", {
+          "preset": "conventionalcommits",
+          "presetConfig": {
+            "types": [
+              { "type": "feat", "section": "Features" },
+              { "type": "fix", "section": "Bug Fixes" },
+              { "type": "perf", "section": "Performance Improvements" },
+              { "type": "revert", "section": "Reverts" },
+              { "type": "docs", "section": "Documentation", "hidden": false },
+              { "type": "style", "section": "Styles", "hidden": false },
+              { "type": "chore", "section": "Miscellaneous Chores", "hidden": false },
+              { "type": "refactor", "section": "Code Refactors", "hidden": false },
+              { "type": "test", "section": "Tests", "hidden": false },
+              { "type": "build", "section": "Build System", "hidden": false },
+              { "type": "ci", "section": "CI/CD", "hidden": false },
+              { "type": "improvement", "section": "Improvements", "hidden": false }
+            ]
+          }
+        }
+      ],
+      "@semantic-release/github",
+      ["@semantic-release/changelog", {
+        "changelogFile": "changelogs/CHANGELOG.md"
+      }],
+      ["@semantic-release/exec", {
+        "prepareCmd": "mv changelogs/CHANGELOG.md changelogs/CHANGELOG-${nextRelease.version}.md;"
+      }],
+      ["@semantic-release/git", {
+        "assets": ["package.json", "changelogs/**", "pom.xml"],
+        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+      }]
+    ]
+  },
+  "dependencies": {
+    "semantic-release": "^19.0.5",
+    "@semantic-release/commit-analyzer": "^9.0.2",
+    "@semantic-release/release-notes-generator": "^10.0.3",
+    "@semantic-release/github": "^8.0.7",
+    "@semantic-release/changelog": "^6.0.2",
+    "@semantic-release/exec": "^6.0.3",
+    "@semantic-release/git": "^10.0.1"
+  }
+}

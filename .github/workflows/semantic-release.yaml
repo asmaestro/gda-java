@@ -1,0 +1,138 @@
+---
+name: Semantic Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.mvn/**'
+      - 'src/**'
+      - 'Dockerfile'
+      - 'pom.xml'
+      - '.classpath'
+      - '.project'
+
+permissions:
+  id-token: write  # required to use OIDC authentication
+  contents: write  # required to checkout the code from the repo and to perform release
+  packages: write  # required to publish to packages
+  pull-requests: write
+
+jobs:
+  check:
+    name: prerequisites checks
+    runs-on: ubuntu-latest
+    outputs:
+      has_gh_secrets: ${{ steps.check-gh-key-secret.outputs.declared }}
+    steps:
+      - name: Check for GitHub Secret availability
+        id: check-gh-key-secret
+        shell: bash
+        run: |
+          if [[ ! -z  "${{ secrets.GITHUB_TOKEN }}" ]]; then
+            echo "All secrets are declared."
+            echo "declared=true" >> $GITHUB_OUTPUT;
+          else
+            echo "GITHUB_TOKEN secret is missing."
+            exit 1
+          fi
+
+  check_version_number:
+    name: check version number
+    needs: [check]
+    runs-on: ubuntu-latest
+    if: |
+      needs.check.outputs.has_gh_secrets
+      && github.actor != 'nektos/act'
+    permissions:
+      contents: write  # to be able to publish a GitHub release
+      issues: write  # to be able to comment on released issues
+      pull-requests: write  # to be able to comment on released pull requests
+    outputs:
+      new_release_published: ${{ steps.semantic_dry.outputs.new_release_published }}
+      new_release_version: ${{ steps.semantic_dry.outputs.new_release_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Get semantic release version
+        uses: cycjimmy/semantic-release-action@v3
+        id: semantic_dry
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          dry_run: true
+          branches: |
+            [
+              "+([0-9])?(.{+([0-9]),x}).x",
+              "main"
+            ]
+          extends: |
+            conventional-changelog-conventionalcommits
+          extra_plugins: |
+            @semantic-release/commit-analyzer@9.0.2
+            @semantic-release/release-notes-generator@10.0.3
+            @semantic-release/github@8.0.7
+            @semantic-release/changelog@6.0.2
+            @semantic-release/exec@6.0.3
+            @semantic-release/git@10.0.1
+
+  tag_version:
+    name: release
+    needs: [check, check_version_number]
+    if: |
+      needs.check.outputs.has_gh_secrets
+      && needs.check_version_number.outputs.new_release_published
+      && github.actor != 'nektos/act'
+    permissions:
+      contents: write  # to be able to publish a GitHub release
+      issues: write  # to be able to comment on released issues
+      pull-requests: write  # to be able to comment on released pull requests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: false  # make sure the release step uses its own credentials
+      - name: Semantic Release
+        uses: cycjimmy/semantic-release-action@v3
+        id: semantic
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          semantic_version: 19
+          branches: |
+            [
+              "+([0-9])?(.{+([0-9]),x}).x",
+              "main"
+            ]
+          extends: |
+            conventional-changelog-conventionalcommits
+          extra_plugins: |
+            @semantic-release/commit-analyzer@9.0.2
+            @semantic-release/release-notes-generator@10.0.3
+            @semantic-release/github@8.0.7
+            @semantic-release/changelog@6.0.2
+            @semantic-release/exec@6.0.3
+            @semantic-release/git@10.0.1
+
+      - name: Changelog version
+        if: steps.semantic.outputs.new_release_published == 'true'
+        run: |
+          echo ${{ steps.semantic.outputs.new_release_version }}
+
+    outputs:
+      new_release: ${{ steps.semantic.outputs.new_release_published }}
+      new_version: ${{ steps.semantic.outputs.new_release_version }}
+
+  github-publish:
+    name: GitHub Build & Publish - ${{ needs.tag_version.outputs.new_version }}
+    needs: [tag_version]
+    if: |
+      needs.check.outputs.has_gh_secrets
+        && needs.tag_version.outputs.new_release
+    uses: ./.github/workflows/build-test-publish.yaml
+    with:
+      release_tag: ${{ needs.tag_version.outputs.new_version }}
+      dry_run: false
+    secrets: inherit
