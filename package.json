@@ -20,32 +20,8 @@
         "parserOpts": {
           "noteKeywords": ["BREAKING CHANGE", "BREAKING CHANGES"]
         }
-      }
-    ],
-        ["@semantic-release/release-notes-generator", {
-          "preset": "conventionalcommits",
-          "presetConfig": {
-            "types": [
-              { "type": "feat", "section": "Features" },
-              { "type": "fix", "section": "Bug Fixes" },
-              { "type": "perf", "section": "Performance Improvements" },
-              { "type": "revert", "section": "Reverts" },
-              { "type": "docs", "section": "Documentation", "hidden": false },
-              { "type": "style", "section": "Styles", "hidden": false },
-              { "type": "chore", "section": "Miscellaneous Chores", "hidden": false },
-              { "type": "refactor", "section": "Code Refactors", "hidden": false },
-              { "type": "test", "section": "Tests", "hidden": false },
-              { "type": "build", "section": "Build System", "hidden": false },
-              { "type": "ci", "section": "CI/CD", "hidden": false },
-              { "type": "improvement", "section": "Improvements", "hidden": false }
-            ]
-          }
-        }
-      ],
-      "@semantic-release/github",
-      ["@semantic-release/exec", {
-        "prepareCmd": "./prepare-release.sh ${nextRelease.version}"
       }],
+      "@semantic-release/github",
       ["@semantic-release/git", {
         "assets": ["package.json", "pom.xml"],
         "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
@@ -55,7 +31,6 @@
   "dependencies": {
     "semantic-release": "^19.0.5",
     "@semantic-release/commit-analyzer": "^9.0.2",
-    "@semantic-release/release-notes-generator": "^10.0.3",
     "@semantic-release/github": "^8.0.7",
     "@semantic-release/exec": "^6.0.3",
     "@semantic-release/git": "^10.0.1"
