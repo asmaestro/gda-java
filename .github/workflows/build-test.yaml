@@ -5,6 +5,13 @@ on:
   push:
     branches:
       - main
+    paths:
+      - '.mvn/**'
+      - 'src/**'
+      - 'Dockerfile'
+      - 'pom.xml'
+      - '.classpath'
+      - '.project'
 
 jobs:
   check:
