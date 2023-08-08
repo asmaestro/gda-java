@@ -1,0 +1,14 @@
+version: "3.7"
+
+services:
+  web:
+    image: "${IMAGE_URL}"
+    # environment: 
+      # DB_CONNECTION: ${DB_CONNECTION}
+    ports:
+      - "8080:8080"
+    # depends_on: 
+      # - db
+
+# Commented code is optional if we have database or other services.
+# We can inject DB_CONNECTION from CI/CD pipeline using the same approach as for IMAGE_URL

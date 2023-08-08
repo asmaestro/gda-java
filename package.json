@@ -49,9 +49,6 @@
       ["@semantic-release/exec", {
         "prepareCmd": "mv changelogs/CHANGELOG.md changelogs/CHANGELOG-${nextRelease.version}.md;"
       }],
-      ["@semantic-release/exec", {
-        "prepareCmd": "./prepare-release.sh ${nextRelease.version}"
-      }],
       ["@semantic-release/git", {
         "assets": ["package.json", "changelogs/**", "pom.xml"],
         "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"

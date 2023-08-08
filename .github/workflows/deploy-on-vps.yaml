@@ -1,0 +1,88 @@
+---
+name: Deploy on VPS
+
+on:
+  workflow_dispatch:
+    inputs:
+      docker_image_url:
+        description: |
+          'URL to pull docker image'
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      docker_image_url:
+        description: |
+          'URL to pull docker image'
+        required: true
+        type: string
+
+env:
+  USER_PATH: "/home/maestro"
+
+jobs:
+  check:
+    name: Prerequisites Check
+    runs-on: self-hosted
+    outputs:
+      has_gh_secrets: ${{ steps.check-gh-key-secret.outputs.declared }}
+    steps:
+      - name: Check for GitHub Secret availability
+        id: check-gh-key-secret
+        shell: bash
+        run: |
+          if [[ ! -z  "${{ secrets.VPS_PASSWORD }}" ]] && [[ ! -z  "${{ secrets.VPS_USERNAME }}" ]] && [[ ! -z  "${{ secrets.VPS_HOST }}" ]]; then
+            echo "All secrets are declared."
+            echo "declared=true" >> $GITHUB_OUTPUT;
+          else
+            echo "At least one secret is missing: VPS_PASSWORD, VPS_USERNAME, VPS_HOST."
+            exit 1
+          fi
+
+  prepare-environment:
+    runs-on: self-hosted
+    name: Prepare environment
+    needs: [check]
+    if: |
+      needs.check.outputs.has_gh_secrets
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        ref: main
+    - name: copy file via ssh password
+      uses: appleboy/scp-action@v0.1.4
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USERNAME }}
+        password: ${{ secrets.VPS_PASSWORD }}
+        # Consider 'key' instead of 'password'
+        # key: ${{ secrets.KEY }}
+        port: 22
+        source: "docker-compose.yml"
+        # path to home directory of the user
+        target: ${{ env.USER_PATH }}
+        # keep updating the docker-compose.yml file
+        overwrite: true
+
+  deploy-docker:
+    name: Deploy - ${{ inputs.docker_image_url }}
+    runs-on: self-hosted
+    needs: [prepare-environment]
+    steps:
+    - name: Deploy on VPS
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USERNAME }}
+        password: ${{ secrets.VPS_PASSWORD }}
+        # Consider 'key' instead of 'password'
+        # key: ${{ secrets.KEY }}
+        port: 22
+        script_stop: true
+        script: |
+          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u github.actor --password-stdin
+          docker pull ${{ inputs.docker_image_url }}
+          cd ${{ env.USER_PATH }}
+          export IMAGE_URL=${{ inputs.docker_image_url }}
+          docker compose up -d
