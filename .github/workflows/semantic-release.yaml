@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - beta
     paths:
       - '.mvn/**'
       - 'src/**'
@@ -65,7 +66,11 @@ jobs:
           branches: |
             [
               "+([0-9])?(.{+([0-9]),x}).x",
-              "main"
+              "main",
+              { 
+                "name": "beta", 
+                "prerelease": true 
+              }
             ]
           extends: |
             conventional-changelog-conventionalcommits
@@ -104,7 +109,11 @@ jobs:
           branches: |
             [
               "+([0-9])?(.{+([0-9]),x}).x",
-              "main"
+              "main",
+              { 
+                "name": "beta", 
+                "prerelease": true 
+              }
             ]
           extends: |
             conventional-changelog-conventionalcommits
