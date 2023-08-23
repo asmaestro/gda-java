@@ -43,4 +43,8 @@ repos:
         stages: [commit-msg]
         additional_dependencies: ["@commitlint/config-conventional"]
         description: Validate commit message aligns with expected conventions
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.0
+    hooks:
+      - id: gitleaks
   # TODO: some java quality check
