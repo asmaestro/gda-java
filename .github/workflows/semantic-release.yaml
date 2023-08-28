@@ -68,7 +68,7 @@ jobs:
               "main"
             ]
           extends: |
-            conventional-changelog-conventionalcommits
+            conventional-changelog-conventionalcommits@6.1.0
           extra_plugins: |
             @semantic-release/commit-analyzer@9.0.2
             @semantic-release/release-notes-generator@10.0.3
@@ -107,7 +107,7 @@ jobs:
               "main"
             ]
           extends: |
-            conventional-changelog-conventionalcommits
+            conventional-changelog-conventionalcommits@6.1.0
           extra_plugins: |
             @semantic-release/commit-analyzer@9.0.2
             @semantic-release/release-notes-generator@10.0.3
