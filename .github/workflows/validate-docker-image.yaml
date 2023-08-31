@@ -1,0 +1,143 @@
+---
+name: Docker Image Validation
+
+on:
+  pull_request:
+    paths:
+      - '.mvn/**'
+      - 'src/**'
+      - 'Dockerfile'
+      - 'pom.xml'
+      - '.classpath'
+      - '.project'
+
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write  # required to publish to packages
+  pull-requests: write
+
+jobs:
+  build-image:
+    name: Build Image
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY: ghcr.io
+      REPOSITORY: ${{ github.repository }}
+    outputs:
+      image-tag: ${{ steps.image-tag.outputs.image-tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          server-id: projectrepo
+          settings-path: ${{ github.workspace }}/.mvn
+          cache: maven
+
+      - name: Maven Wrapper
+        id: mvn-wrapper
+        shell: bash
+        run: |
+          mvn --settings ${GITHUB_WORKSPACE}/.mvn/settings.xml -N wrapper:wrapper
+      
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2.2.0
+
+      # BuildKit (used with `docker buildx`) is the best way to build images
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v2.9.0
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v4
+        if: |
+          success()
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=gha-${{ github.run_id }},enable=${{github.event_name == 'pull_request'}},priority=200
+            type=ref,event=pr,priority=100
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        if: |
+          success()
+        with:
+          context: .
+          target: production
+          push: true
+          builder: ${{ steps.buildx.outputs.name }}
+          # use github cache API for faster builds:
+          # https://github.com/docker/build-push-action/blob/master/docs/advanced/cache.md#cache-backend-api
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+        
+      - name: Find comment for image tags
+        uses: peter-evans/find-comment@v2.4.0
+        id: image-comment
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: 'github-actions[bot]'
+          body-includes: Docker image tag(s) pushed
+      
+      - name: Create or update comment for image tags
+        uses: peter-evans/create-or-update-comment@v3.0.2
+        with:
+          comment-id: ${{ steps.image-comment.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            Docker image tag(s) pushed:
+            ```text
+            ${{ steps.meta.outputs.tags }} 
+            ```
+
+            Labels added to images:
+            ```text
+            ${{ steps.meta.outputs.labels }}
+            ```
+          edit-mode: replace
+
+      - name: Find the primary image tag we just pushed, and output it
+        id: image-tag
+        if: |
+          success()
+        run: |
+          # shellcheck disable=SC2086
+          echo "image-tag=${{ steps.meta.outputs.version }}" >> $GITHUB_OUTPUT
+
+  scan-image:
+    name: Scan Image
+    needs: build-image
+    permissions:
+      packages: read
+      contents: write
+    uses: asmaestro/actions/.github/workflows/image-scan-trivy.yaml@solution-security
+    secrets:
+      registry-username: ${{ github.actor }}
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
+    with:
+      image: 'ghcr.io/${{ github.repository }}:${{ needs.build-image.outputs.image-tag }}'
+      exit-code: 1 # fail the job if issues are found
+      severity: HIGH,CRITICAL
+      ignore-unfixed: true
+      upload-artifact: true
+      upload-release-assets: false
+      upload-results-github-security: false

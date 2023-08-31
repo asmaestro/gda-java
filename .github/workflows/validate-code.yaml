@@ -1,0 +1,20 @@
+name: SAST validation
+
+on:
+  pull_request:
+    paths:
+      - '.mvn/**'
+      - 'src/**'
+      - 'pom.xml'
+      - '.classpath'
+      - '.project'
+
+jobs:
+  sast:
+    name: Validate code
+    uses: asmaestro/actions/.github/workflows/sast-validation-semgrep.yaml@solution-security
+    with:
+      rules: "p/java"
+      upload-artifact: true
+      upload-release-assets: false
+      upload-results-github-security: false

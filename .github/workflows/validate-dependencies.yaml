@@ -1,0 +1,31 @@
+---
+name: SCA Validation
+
+on:
+  pull_request:
+    paths:
+      - '.mvn/**'
+      - 'src/**'
+      - 'pom.xml'
+      - '.classpath'
+      - '.project'
+
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  sca:
+    name: Validate Maven dependencies
+    uses: asmaestro/actions/.github/workflows/sca-validation-trivy.yaml@solution-security
+    with:
+      exit-code: 1 # fail the job if issues are found
+      severity: HIGH,CRITICAL
+      ignore-unfixed: true
+      format: table
+      upload-artifact: true
+      upload-release-assets: false
+      upload-results-github-security: false

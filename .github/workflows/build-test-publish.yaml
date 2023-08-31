@@ -32,6 +32,8 @@ permissions:
   contents: write  # required to checkout the code from the repo and to perform release
   packages: write  # required to publish to packages
   pull-requests: write
+  security-events: write # required to push scan results to Github Security
+  # note: it's available only for public repos or organizations, more info: https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github
 
 jobs:
   check:
@@ -61,6 +63,35 @@ jobs:
           body: |
             ## GitHub Packages
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  sast:
+    name: Validate code
+    uses: asmaestro/actions/.github/workflows/sast-validation-semgrep.yaml@solution-security
+    permissions:
+      contents: write
+    needs: [check]
+    with:
+      rules: "p/java"
+      upload-artifact: true
+      upload-release-assets: true
+      release-tag: ${{ inputs.release_tag }}
+      upload-results-github-security: false
+
+  sca:
+    name: Validate dependencies
+    uses: asmaestro/actions/.github/workflows/sca-validation-trivy.yaml@solution-security
+    permissions:
+      contents: write
+    needs: [check]
+    with:
+      exit-code: 1 # fail the job if issues are found
+      severity: HIGH,CRITICAL
+      ignore-unfixed: true
+      format: sarif
+      upload-artifact: true
+      upload-release-assets: true
+      release-tag: ${{ inputs.release_tag }}
+      upload-results-github-security: false
 
   maven:
     name: GitHub Packages - Maven Build & Publish
@@ -227,3 +258,56 @@ jobs:
           body: |
             - GitHub Packages Container URL: ${{ env.REGISTRY }}/${{ github.repository }}:${{ inputs.release_tag }}
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  scan-image:
+    name: Scan Image
+    needs: [container]
+    permissions:
+      packages: read
+      contents: write
+    uses: asmaestro/actions/.github/workflows/image-scan-trivy.yaml@solution-security
+    secrets:
+      registry-username: ${{ github.actor }}
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
+    with:
+      image: 'ghcr.io/${{ github.repository }}:${{ inputs.release_tag }}'
+      exit-code: 1 # fail the job if issues are found
+      severity: HIGH,CRITICAL
+      ignore-unfixed: true
+      upload-artifact: true
+      release-tag: ${{ inputs.release_tag }}
+      upload-release-assets: true
+      upload-results-github-security: false
+  
+  scan-sbom:
+    name: Generate & Scan SBOM
+    needs: [container]
+    permissions:
+      packages: read
+      contents: write
+    uses: asmaestro/actions/.github/workflows/sbom-scan-grype.yaml@solution-security
+    secrets:
+      registry-username: ${{ github.actor }}
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
+    with:
+      image: 'ghcr.io/${{ github.repository }}:${{ inputs.release_tag }}'
+      release-tag: ${{ inputs.release_tag }}
+      scan-sbom: true
+      severity: 'high' # minimum vulnerability severity to trigger a failure 
+      upload-release-assets: true
+      upload-artifact: true
+
+  scan-iac:
+    name: Scan IaC
+    needs: [container]
+    permissions:
+      contents: write
+    uses: asmaestro/actions/.github/workflows/iac-scan-trivy.yaml@solution-security
+    with:
+      exit-code: 1 # fail the job if issues are found
+      severity: HIGH,CRITICAL
+      ignore-unfixed: true
+      upload-artifact: true
+      release-tag: ${{ inputs.release_tag }}
+      upload-release-assets: true
+      upload-results-github-security: false
